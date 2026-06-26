@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { Test, type TestingModule } from "@nestjs/testing";
+import { ConfigService } from "@nestjs/config";
 import type { Request, Response } from "express";
 import { AuthController } from "../../src/controllers/AuthController";
 import { AuthService } from "../../src/services/AuthService";
@@ -64,6 +65,16 @@ describe("AuthController", () => {
 					useValue: {
 						verify: jest.fn(),
 						sign: jest.fn(),
+					},
+				},
+				{
+					provide: ConfigService,
+					useValue: {
+						get: jest.fn((key: string) => {
+							if (key === "REFRESH_TOKEN_COOKIE") return "refresh_token";
+							if (key === "NODE_ENV") return "test";
+							return null;
+						}),
 					},
 				},
 			],

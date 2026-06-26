@@ -42,6 +42,22 @@ export class PublicRepository {
 		);
 	}
 
+	public async saveBanners(banners: {
+		type: string;
+		image_url: string;
+		link_url: string;
+		order_index: number;
+	}[]): Promise<void> {
+		if (banners.length === 0) return;
+		const db = await this.getDatabase();
+		const placeholders = banners.map(() => "(?, ?, ?, ?)").join(", ");
+		const values = banners.flatMap(b => [b.type, b.image_url, b.link_url, b.order_index]);
+		await db.run(
+			`INSERT INTO banners (type, image_url, link_url, order_index) VALUES ${placeholders}`,
+			values
+		);
+	}
+
 	public async deleteBanner(id: number): Promise<any> {
 		const db = await this.getDatabase();
 		const banner = await db.get("SELECT image_url FROM banners WHERE id = ?", [
