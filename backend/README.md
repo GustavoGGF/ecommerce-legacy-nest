@@ -126,6 +126,3 @@ Fluxo de Auth: Header `Authorization: Bearer <token>` (após realizar o login)
 | npm run test:e2e | Roda testes de integração/E2E. |
 | npm run start:dev | Inicia a aplicação para ambiente de desenvolvimento. |
 | npm run start:prod | Roda a aplicação final compilada. |
-
-## 9. Fluxograma
-[Fluxograma - Arquitetura DDD](../arquitetura/DDD.md)
