@@ -51,7 +51,7 @@ export class BannerController {
 	@UseInterceptors(FilesInterceptor("banners", 5))
 	public async postBanner(
 		@Param("type") type: string,
-		@UploadedFiles() files: Express.Multer.File[],
+		@UploadedFiles() files: Express.Multer.File[],0
 		@Body() body: any,
 	) {
 		if (!/^[a-zA-Z0-9_-]+$/.test(type)) {

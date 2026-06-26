@@ -1,3 +1,9 @@
 .agents
 
 .env
+
+.vscode
+
+node_modules
+
+.geminiignore

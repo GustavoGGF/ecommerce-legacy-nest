@@ -2,6 +2,13 @@ import { Controller, Get, Res, Req, Next } from "@nestjs/common";
 import { join } from "path";
 import { Response, Request, NextFunction } from "express";
 import { ApiConsumes, ApiOperation, ApiResponse } from "@nestjs/swagger";
+import rateLimit from "express-rate-limit";
+
+const serveFrontendLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000, // 15 minutos
+	limit: 100, // Limita cada IP a 100 requests por janela
+	message: "Muitas requisições, tente novamente mais tarde",
+});
 
 @Controller()
 export class AppController {
@@ -22,23 +29,27 @@ export class AppController {
 		@Res() res: Response,
 		@Next() next: NextFunction,
 	) {
-		// Se o caminho contém um ponto (arquivo) ou começa com prefixos de API, pula para o próximo handler.
-		const isApi =
-			req.path.startsWith("/public") ||
-			req.path.startsWith("/auth") ||
-			req.path.startsWith("/user");
+		serveFrontendLimiter(req, res, (err: any) => {
+			if (err) return next(err);
 
-		if (req.path.includes(".") || isApi) {
-			return next();
-		}
+			// Se o caminho contém um ponto (arquivo) ou começa com prefixos de API, pula para o próximo handler.
+			const isApi =
+				req.path.startsWith("/public") ||
+				req.path.startsWith("/auth") ||
+				req.path.startsWith("/user");
 
-		// Caminho absoluto para o seu arquivo de entrada do Angular
-		const indexFile = join(
-			process.cwd(),
-			"client",
-			"browser",
-			"index.csr.html",
-		);
-		return res.sendFile(indexFile);
+			if (req.path.includes(".") || isApi) {
+				return next();
+			}
+
+			// Caminho absoluto para o seu arquivo de entrada do Angular
+			const indexFile = join(
+				process.cwd(),
+				"client",
+				"browser",
+				"index.csr.html",
+			);
+			return res.sendFile(indexFile);
+		});
 	}
 }
