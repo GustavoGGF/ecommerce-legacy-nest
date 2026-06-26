@@ -6,6 +6,7 @@ import {
 	Post,
 	Req,
 	Res,
+	UnauthorizedException,
 	UseGuards,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -163,5 +164,42 @@ export class AuthController {
 		}
 		this.clearRefreshTokenCookie(res);
 		return { message: "Logout realizado com sucesso." };
+	}
+
+	@ApiOperation({
+		summary: "Renova o Access Token usando o Refresh Token",
+		description:
+			"Valida o Refresh Token do cookie e retorna um novo Access Token. Também rotaciona o Refresh Token.",
+	})
+	@ApiResponse({
+		status: 200,
+		description: "Tokens renovados com sucesso.",
+	})
+	@ApiResponse({
+		status: 401,
+		description: "Refresh Token ausente ou inválido.",
+	})
+	@Post("refresh")
+	@HttpCode(HttpStatus.OK)
+	async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+		const cookieName =
+			this.configService.get<string>("REFRESH_TOKEN_COOKIE") || "refresh_token";
+		const rawToken: string | undefined = (
+			req.cookies as Record<string, string>
+		)?.[cookieName];
+
+		if (!rawToken) {
+			throw new UnauthorizedException("Refresh token ausente.");
+		}
+
+		const { accessToken, rawRefreshToken, refreshExpiresAt } =
+			await this.authService.refreshAccessToken(rawToken);
+
+		this.setRefreshTokenCookie(res, rawRefreshToken, refreshExpiresAt);
+
+		return {
+			message: "Tokens renovados com sucesso.",
+			access_token: accessToken,
+		};
 	}
 }

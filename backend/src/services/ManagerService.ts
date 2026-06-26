@@ -143,7 +143,7 @@ export class ManagerService {
 		files: Express.Multer.File[],
 		type: string,
 		body: any,
-	): Promise<{ invalidImages: string[]; urlImages: string[] }> {
+	): Promise<{ invalidImages: string[]; urlImages: string[]; failedUrls?: string[] }> {
 		if (!files || files.length === 0) {
 			throw new UnprocessableEntityException(
 				"Nenhum arquivo de imagem foi enviado.",
@@ -151,7 +151,8 @@ export class ManagerService {
 		}
 
 		const folder = `shared/${type}`;
-		const result = await this.validateImages(files, folder);
+		const validationResult = await this.validateImages(files, folder);
+		const result: { invalidImages: string[]; urlImages: string[]; failedUrls?: string[] } = validationResult;
 
 		// Se houver imagens salvas com sucesso, persiste no banco de dados
 		if (result.urlImages.length > 0) {
@@ -174,16 +175,33 @@ export class ManagerService {
 					currentOrder = (await this.publicRepository.getMaxOrder(type)) + 1;
 				}
 
-				for (const url of result.urlImages) {
-					await this.publicRepository.saveBanner({
-						type,
-						image_url: url,
-						link_url: body.link,
-						order_index: currentOrder++,
-					});
-				}
+				const bannersToInsert = result.urlImages.map((url) => ({
+					type,
+					image_url: url,
+					link_url: body.link,
+					order_index: currentOrder++,
+				}));
 
-				await db.run("COMMIT");
+				try {
+					await this.publicRepository.saveBanners(bannersToInsert);
+					await db.run("COMMIT");
+				} catch (bulkError) {
+					this.logger.error(`Erro ao persistir banners em massa: ${bulkError}. Tentando fallback um a um.`);
+
+					const failedUrls: string[] = [];
+					for (const banner of bannersToInsert) {
+						try {
+							await this.publicRepository.saveBanner(banner);
+						} catch (singleError) {
+							this.logger.error(`Erro ao salvar o banner ${banner.image_url}: ${singleError}`);
+							failedUrls.push(banner.image_url);
+						}
+					}
+					await db.run("COMMIT");
+
+					// Return the failedUrls so they can be processed by frontend as requested.
+					result.failedUrls = failedUrls;
+				}
 			} catch (error) {
 				await db.run("ROLLBACK");
 				this.logger.error(`Erro ao persistir banners: ${error}`);
