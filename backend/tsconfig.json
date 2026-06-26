@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2023",
+    "rootDir": "src",
+    "outDir": "./dist",
+    "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "declaration": true,
+    "strict": true,
+    "noImplicitAny": false, // Resolve o erro de (req, res, next)
+    "strictPropertyInitialization": false, // Resolve o erro nos Models (label, mail, etc)
+    "useUnknownInCatchVariables": false, // Resolve o erro do 'error' ser unknown
+    "types": ["node", "jest"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "../client"]
+}
