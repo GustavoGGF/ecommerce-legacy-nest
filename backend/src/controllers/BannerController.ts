@@ -9,6 +9,7 @@ import {
 	UseGuards,
 	UseInterceptors,
 	UploadedFiles,
+	BadRequestException,
 } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
 import {
@@ -53,6 +54,9 @@ export class BannerController {
 		@UploadedFiles() files: Express.Multer.File[],
 		@Body() body: any,
 	) {
+		if (!/^[a-zA-Z0-9_-]+$/.test(type)) {
+			throw new BadRequestException("Invalid type parameter");
+		}
 		return await this.service.postBanner(files, type, body);
 	}
 
