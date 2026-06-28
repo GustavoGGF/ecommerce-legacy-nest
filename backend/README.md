@@ -115,12 +115,7 @@ Swagger/OpenAPI: /api (disponível apenas quando NODE_ENV não for production)
 Coleção Postman/Insomnia: Não disponível no momento.
 Fluxo de Auth: Header `Authorization: Bearer <token>` (após realizar o login)
 
-## 8. Performance Optimizations
-
-*   **Public Repository:** Added `getProductImageCounts` to handle bulk fetching of image counts.
-*   **Public Service:** Removed N+1 query issue in `getBestSellers` method by using `getProductImageCounts` instead of querying the count for each item iteratively. This results in significant query reduction.
-
-## 9. Scripts e Comandos de Rotina
+## 8. Scripts e Comandos de Rotina
 
 | Comando | Descrição |
 |---|---|
