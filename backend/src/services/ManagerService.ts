@@ -590,30 +590,57 @@ export class ManagerService {
 	): Promise<{ successResultValidation: any[]; failResultValidation: any[] }> {
 		const failResultValidation: any[] = [];
 		const successResultValidation: any = [];
-		for (const item of colors) {
-			const { color, quantity, size } = item;
-			let { failsId, sucessId } = await this.processId(color);
-			let { failsQtd, sucessQtd } = await this.processQtd(quantity);
-			let { failsSize, successSize } = await this.processSize(size);
+		const batchSize = 50;
 
-			if (sucessId && sucessQtd) {
-				successResultValidation.push({
-					id: color,
-					colorId: sucessId,
-					quantity: sucessQtd,
-					size: successSize,
-				});
-			}
+		for (let i = 0; i < colors.length; i += batchSize) {
+			const batch = colors.slice(i, i + batchSize);
+			const batchPromises = batch.map(async (item: any) => {
+				const { color, quantity, size } = item;
+				const [idResult, qtdResult, sizeResult] = await Promise.all([
+					this.processId(color),
+					this.processQtd(quantity),
+					this.processSize(size)
+				]);
 
-			if (failsId && failsQtd) {
-				failResultValidation.push({
-					id: color,
-					colorId: failsId,
-					quantity: failsQtd,
-					size: failsSize,
-				});
+				const { failsId, sucessId } = idResult;
+				const { failsQtd, sucessQtd } = qtdResult;
+				const { failsSize, successSize } = sizeResult;
+
+				let successItem: any = null;
+				let failItem: any = null;
+
+				if (sucessId && sucessQtd) {
+					successItem = {
+						id: color,
+						colorId: sucessId,
+						quantity: sucessQtd,
+						size: successSize,
+					};
+				}
+
+				if (failsId && failsQtd) {
+					failItem = {
+						id: color,
+						colorId: failsId,
+						quantity: failsQtd,
+						size: failsSize,
+					};
+				}
+				return { successItem, failItem };
+			});
+
+			const results = await Promise.all(batchPromises);
+
+			for (const res of results) {
+				if (res.successItem) {
+					successResultValidation.push(res.successItem);
+				}
+				if (res.failItem) {
+					failResultValidation.push(res.failItem);
+				}
 			}
 		}
+
 		return { successResultValidation, failResultValidation };
 	}
 
