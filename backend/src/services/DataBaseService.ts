@@ -55,25 +55,76 @@ export class DataBaseService {
 	}> {
 		const successResultCallBack: FallbackSuccess[] = [];
 		const failResultCallBack: FallbackError[] = [];
-		for (const item of colors) {
-			try {
-				const db = await this.getDatabase();
-				await db.run("BEGIN");
 
-				const query = `${operation} ${table} (${coluns}) VALUES (?, ?, ?, ?)`;
-				const values = [id, item.color, item.quantity, item.size];
+		if (!colors || colors.length === 0) {
+			return { successResultCallBack, failResultCallBack };
+		}
 
-				await db.run(query, values);
+		try {
+			const db = await this.getDatabase();
 
-				await db.run("COMMIT");
-				successResultCallBack.push({
-					status: "sucesso",
-					item: item,
+			// Change "INSERT INTO" to "INSERT OR IGNORE INTO" for bulk ignore duplicate errors
+			const ignoreOperation = operation.replace("INSERT INTO", "INSERT OR IGNORE INTO");
+
+			const placeholders = colors.map(() => "(?, ?, ?, ?)").join(", ");
+			const query = `${ignoreOperation} ${table} (${coluns}) VALUES ${placeholders} RETURNING *`;
+
+			const values: any[] = [];
+			for (const item of colors) {
+				values.push(id, item.color, item.quantity, item.size);
+			}
+
+			// We wrap the whole operation in a transaction in case there's another kind of error
+			await db.run("BEGIN");
+			const returnedRows = await db.all(query, values);
+			await db.run("COMMIT");
+
+			// Determine successes and failures by checking which items were actually inserted
+			// Creating a mutable array of returned rows to properly handle duplicate inputs
+			// If user inputs two exact duplicates, only one is inserted.
+			// We consume it from the returned rows so the second duplicate is correctly marked as a failure.
+			const availableRows = [...returnedRows];
+
+			// Try dynamically matching returned rows with requested items using provided columns list
+			// Extract col names, assuming format "col1, col2, col3, col4"
+			// Usually: product_id, color_id, quantity, tamanho
+			const colNames = coluns.split(',').map(c => c.trim());
+
+			for (const item of colors) {
+				// Match on the dynamic columns provided
+				const matchIndex = availableRows.findIndex((row) => {
+					// Matches the logic: values pushed are [id, item.color, item.quantity, item.size]
+					// We check if the returned row has matching values for all corresponding columns
+					const matchId = colNames[0] ? row[colNames[0]] == id : true;
+					const matchColor = colNames[1] ? row[colNames[1]] == item.color : true;
+					const matchQuantity = colNames[2] ? row[colNames[2]] == item.quantity : true;
+					const matchSize = colNames[3] ? row[colNames[3]] == item.size : true;
+
+					return matchId && matchColor && matchQuantity && matchSize;
 				});
-			} catch (err) {
-				const db = await this.getDatabase();
-				await db.run("ROLLBACK");
-				this.logger.error(`Erro ao cadastrar um a um: ${err}`);
+
+				if (matchIndex !== -1) {
+					// Consume this row so it can't be matched by a duplicate input
+					availableRows.splice(matchIndex, 1);
+					successResultCallBack.push({
+						status: "sucesso",
+						item: item,
+					});
+				} else {
+					failResultCallBack.push({
+						status: "erro",
+						item: item,
+						error: "Failed to insert due to constraint violation or duplicate (ignored by bulk insert)",
+					});
+				}
+			}
+		} catch (err) {
+			const db = await this.getDatabase();
+			await db.run("ROLLBACK");
+			this.logger.error(`Erro ao cadastrar em lote (fallback): ${err}`);
+
+			// If even the bulk ignore query fails (e.g. invalid syntax), mark all as failed
+			for (const item of colors) {
 				failResultCallBack.push({
 					status: "erro",
 					item: item,
@@ -81,6 +132,7 @@ export class DataBaseService {
 				});
 			}
 		}
+
 		return { successResultCallBack, failResultCallBack };
 	}
 }
