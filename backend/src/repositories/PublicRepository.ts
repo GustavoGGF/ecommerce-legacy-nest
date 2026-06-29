@@ -83,6 +83,39 @@ export class PublicRepository {
 		]);
 	}
 
+	public async updateBannersOrderInBulk(
+		banners: { id: number; order_index: number }[],
+	): Promise<void> {
+		if (!banners || banners.length === 0) return;
+
+		const db = await this.getDatabase();
+
+		// Chunk limits array updates to 100 max per query, dodging SQLite variable limits (max 999 limit usually).
+		const chunkSize = 100;
+		for (let i = 0; i < banners.length; i += chunkSize) {
+			const chunk = banners.slice(i, i + chunkSize);
+
+			const cases = chunk.map(() => "WHEN id = ? THEN ?").join(" ");
+			const ids = chunk.map(b => b.id);
+
+			const params = chunk.flatMap(b => [b.id, b.order_index]);
+			params.push(...ids);
+
+			const placeholders = ids.map(() => "?").join(",");
+
+			const query = `
+				UPDATE banners
+				SET order_index = CASE
+					${cases}
+					ELSE order_index
+				END
+				WHERE id IN (${placeholders})
+			`;
+
+			await db.run(query, params);
+		}
+	}
+
 	public async getMaxOrder(type: string): Promise<number> {
 		const db = await this.getDatabase();
 		const result = await db.get(
