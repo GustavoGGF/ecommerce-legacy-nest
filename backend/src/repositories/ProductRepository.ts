@@ -197,6 +197,50 @@ export class ProductRepository {
 	}
 
 	/**
+	 * Salva múltiplos registros de desconto na tabela `discounts` em lote.
+	 * @param discounts Array contendo os dados dos descontos a serem salvos.
+	 */
+	public async saveDiscountRecordsBatch(discounts: {
+		product_id: number;
+		original_price: number;
+		discount_price: number;
+	}[]): Promise<void> {
+		if (discounts.length === 0) return;
+
+		const db = await this.getDatabase();
+
+		// Divide o array em lotes para evitar o limite de variáveis do SQLite
+		const chunkSize = 200; // 4 variáveis por linha * 200 = 800 (seguro para o limite padrão de 999 do SQLite)
+
+		try {
+			await this.beginTransaction();
+
+			for (let i = 0; i < discounts.length; i += chunkSize) {
+				const chunk = discounts.slice(i, i + chunkSize);
+				const placeholders = chunk.map(() => "(?, (SELECT id FROM product_colors WHERE product_id = ? LIMIT 1), ?, ?)").join(", ");
+				const query = `
+					INSERT INTO discounts (product_id, product_color_id, original_price, discount_price)
+					VALUES ${placeholders}
+				`;
+
+				const values: (number | null)[] = [];
+				for (const d of chunk) {
+					values.push(d.product_id, d.product_id, d.original_price, d.discount_price);
+				}
+
+				await db.run(query, values);
+			}
+
+			await this.commit();
+			this.logger.log(`Foram salvos ${discounts.length} descontos em lote.`);
+		} catch (error) {
+			await this.rollback();
+			this.logger.error(`Erro ao salvar descontos em lote: ${error}`);
+			throw new InternalServerErrorException("Erro ao salvar registros de desconto em lote.");
+		}
+	}
+
+	/**
 	 * Salva um novo registro de desconto na tabela `discounts`.
 	 * @param discountData Os dados do desconto a serem salvos.
 	 */
@@ -236,14 +280,14 @@ export class ProductRepository {
 	}
 
 	/**
-	 * Obtém apenas o ID e a data de criação dos produtos.
-	 * Ideal para triagem inicial de elegibilidade sem carregar dados pesados.
+	 * Obtém apenas o ID, preço e a data de criação dos produtos.
+	 * Ideal para triagem inicial de elegibilidade e cálculo de descontos em lote.
 	 */
 	public async getProductsEligibilityData(): Promise<
-		{ id: number; created_at: string }[]
+		{ id: number; price: number; created_at: string }[]
 	> {
 		const db = await this.getDatabase();
-		const query = `SELECT id, created_at FROM products`;
+		const query = `SELECT id, preco AS price, created_at FROM products`;
 		try {
 			return await db.all(query);
 		} catch (error) {
