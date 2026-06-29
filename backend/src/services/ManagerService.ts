@@ -374,13 +374,24 @@ export class ManagerService {
 
 		const invalidImages: string[] = [];
 		const validImages: Express.Multer.File[] = [];
-		for (const image of images) {
-			const result = await fileTypeFromBuffer(image.buffer);
 
-			if (!result || !result.mime.startsWith("image/")) {
-				invalidImages.push(image.originalname);
-			} else {
-				validImages.push(image);
+		const CONCURRENCY_LIMIT = 20;
+		for (let i = 0; i < images.length; i += CONCURRENCY_LIMIT) {
+			const chunk = images.slice(i, i + CONCURRENCY_LIMIT);
+
+			const results = await Promise.all(
+				chunk.map(async (image) => {
+					const result = await fileTypeFromBuffer(image.buffer);
+					return { image, result };
+				}),
+			);
+
+			for (const { image, result } of results) {
+				if (!result || !result.mime.startsWith("image/")) {
+					invalidImages.push(image.originalname);
+				} else {
+					validImages.push(image);
+				}
 			}
 		}
 
