@@ -63,7 +63,7 @@ export class DiscountService {
 			// 2. Limpa a tabela atual para a nova rotação
 			await this.productRepository.clearAllDiscounts();
 
-			// Busca todos os produtos para triagem
+			// Busca todos os produtos para triagem (agora incluindo o preço)
 			const allProducts =
 				await this.productRepository.getProductsEligibilityData();
 
@@ -79,25 +79,46 @@ export class DiscountService {
 			const productsStockMap =
 				await this.productRepository.getProductsTotalStock(candidateIds);
 
-			let appliedCount = 0;
+			const discountsToApply: {
+				product_id: number;
+				original_price: number;
+				discount_price: number;
+			}[] = [];
+
 			for (const candidate of candidates) {
 				// Primeiro verifica o limite global
-				if (appliedCount >= this.MAX_DISCOUNTED_PRODUCTS) break;
+				if (discountsToApply.length >= this.MAX_DISCOUNTED_PRODUCTS) break;
 				// Valida histórico: se já esteve em promoção (true), ele "cai fora" (pula para o próximo)
 
 				if (discountedProductsSet.has(candidate.id)) continue;
 				const totalStock = productsStockMap.get(candidate.id) || 0;
 				if (totalStock >= this.MIN_STOCK_REQUIRED) {
-					const discount = this.generateRandomDiscount(
+					const discountPercentage = this.generateRandomDiscount(
 						this.DISCOUNT_RANGE.min,
 						this.DISCOUNT_RANGE.max,
 					);
-					await this.applyDiscount(candidate.id, discount);
-					appliedCount++;
+
+					const discountedPrice = this.calculateDiscountedPrice(candidate.price, discountPercentage);
+
+					discountsToApply.push({
+						product_id: candidate.id,
+						original_price: candidate.price,
+						discount_price: discountedPrice,
+					});
+
+					this.logger.log(
+						`Desconto calculado: ${discountPercentage}% no produto ${candidate.id}. De R$${candidate.price} para R$${discountedPrice}`,
+					);
 				}
 			}
+
+			// Persiste os descontos em lote
+			if (discountsToApply.length > 0) {
+				await this.productRepository.saveDiscountRecordsBatch(discountsToApply);
+			}
+
 			this.logger.log(
-				`Processo finalizado. ${appliedCount} novos descontos aplicados.`,
+				`Processo finalizado. ${discountsToApply.length} novos descontos aplicados.`,
 			);
 		} catch (error) {
 			this.logger.error(
@@ -123,10 +144,7 @@ export class DiscountService {
 			}
 
 			// 6. Cálculo do novo preço e persistência
-			const discountFactor = 1 - discountPercentage / 100;
-			const discountedPrice = parseFloat(
-				(product.price * discountFactor).toFixed(2),
-			);
+			const discountedPrice = this.calculateDiscountedPrice(product.price, discountPercentage);
 
 			// Salva o registro na tabela de descontos ativos
 			await this.productRepository.saveDiscountRecord({
@@ -163,6 +181,18 @@ export class DiscountService {
 	private async removeExpiredDiscounts() {
 		this.logger.log("Verificando expiração de histórico de descontos...");
 		await this.productRepository.cleanupOldDiscountsHistory();
+	}
+
+	/**
+	 * Calcula o preço com desconto aplicado.
+	 *
+	 * @param price Preço original do produto.
+	 * @param discountPercentage Porcentagem de desconto a ser aplicada.
+	 * @returns Preço final com o desconto calculado e arredondado para duas casas decimais.
+	 */
+	private calculateDiscountedPrice(price: number, discountPercentage: number): number {
+		const discountFactor = 1 - discountPercentage / 100;
+		return parseFloat((price * discountFactor).toFixed(2));
 	}
 
 	/**
