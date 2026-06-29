@@ -189,11 +189,13 @@ export class PublicService {
 
 			const validProducts: any[] = [];
 
-			// Valida um a um se o produto possui mídias cadastradas
+			// Obtém a contagem de imagens para todos os produtos mais vendidos de uma só vez
+			const productIds = bestSellers.map((product) => product.productId);
+			const imageCounts = await this.publicRepository.getProductImageCounts(productIds);
+
+			// Valida quais produtos possuem mídias cadastradas
 			for (const product of bestSellers) {
-				const imageCount = await this.publicRepository.getProductImageCount(
-					product.productId,
-				);
+				const imageCount = imageCounts[product.productId] || 0;
 				if (imageCount >= 1) {
 					validProducts.push(product);
 				}

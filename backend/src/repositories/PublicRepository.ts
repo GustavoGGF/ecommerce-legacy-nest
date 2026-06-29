@@ -358,6 +358,33 @@ export class PublicRepository {
 	}
 
 	/**
+	 * Obtém a contagem de imagens associadas a múltiplos produtos em uma única consulta.
+	 *
+	 * @param productIds - Array com os IDs dos produtos.
+	 * @returns Promessa contendo um registro mapeando o ID do produto para o número total de imagens.
+	 */
+	public async getProductImageCounts(productIds: number[]): Promise<Record<number, number>> {
+		if (productIds.length === 0) return {};
+
+		const db = await this.getDatabase();
+		const placeholders = productIds.map(() => "?").join(",");
+		const query = `
+			SELECT product_id, COUNT(*) as total
+			FROM product_urls
+			WHERE product_id IN (${placeholders})
+			GROUP BY product_id
+		`;
+		const results = await db.all(query, productIds);
+
+		const counts: Record<number, number> = {};
+		for (const row of results) {
+			counts[row.product_id] = row.total;
+		}
+
+		return counts;
+	}
+
+	/**
 	 * Obtém uma lista de produtos de fallback com imagens, ordenados aleatoriamente.
 	 * Utilizado para preencher vitrines ou seções quando não há produtos específicos disponíveis.
 	 *
