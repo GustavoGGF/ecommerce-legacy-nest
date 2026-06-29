@@ -10,6 +10,11 @@ import { UserRepository } from "../../src/repositories/UserRepository";
 import { ManagerService } from "./../../src/services/ManagerService";
 import { SearchIndexService } from "../../src/services/SearchIndexService";
 
+
+jest.mock('file-type', () => ({
+  fileTypeFromBuffer: jest.fn().mockImplementation(() => Promise.resolve({ ext: 'png', mime: 'image/png' })),
+}), { virtual: true });
+
 describe("ManagerService - validateProduct", () => {
 	let service: ManagerService;
 	let productRepo: jest.Mocked<ProductRepository>;

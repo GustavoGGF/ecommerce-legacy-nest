@@ -114,12 +114,7 @@ export class ManagerService {
 		try {
 			await db.run("BEGIN TRANSACTION");
 
-			for (const banner of banners) {
-				await this.publicRepository.updateBannerOrder(
-					banner.id,
-					banner.order_index,
-				);
-			}
+			await this.publicRepository.updateBannersOrderInBulk(banners);
 
 			await db.run("COMMIT");
 		} catch (error) {
