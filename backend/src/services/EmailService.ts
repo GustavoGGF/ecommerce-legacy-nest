@@ -3,30 +3,30 @@ import * as nodemailer from "nodemailer";
 
 @Injectable()
 export class EmailService {
-	private transporter: nodemailer.Transporter;
-	private readonly logger = new Logger(EmailService.name);
+  private transporter: nodemailer.Transporter;
+  private readonly logger = new Logger(EmailService.name);
 
-	constructor() {
-		this.transporter = nodemailer.createTransport({
-			host: process.env.SMTP_HOST,
-			port: Number(process.env.SMTP_PORT) || 587,
-			secure: process.env.SMTP_SECURE === "true", // true for 465, false for other ports
-			auth: {
-				user: process.env.SMTP_USER,
-				pass: process.env.SMTP_PASS,
-			},
-		});
-	}
+  constructor() {
+    this.transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === "true", // true for 465, false for other ports
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+  }
 
-	async sendVerificationEmail(to: string, token: string) {
-		const frontendUrl = process.env.FRONTEND_URL || "http://localhost:4200";
-		const verificationLink = `${frontendUrl}/verificar-email?token=${token}`;
+  async sendVerificationEmail(to: string, token: string) {
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:4200";
+    const verificationLink = `${frontendUrl}/verificar-email?token=${token}`;
 
-		const mailOptions = {
-			from: `"Sublime" <${process.env.SMTP_USER}>`,
-			to: to,
-			subject: "Confirme seu cadastro na Sublime",
-			html: `
+    const mailOptions = {
+      from: `"Sublime" <${process.env.SMTP_USER}>`,
+      to: to,
+      subject: "Confirme seu cadastro na Sublime",
+      html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <h2 style="color: #333;">Olá! Falta pouco para concluir seu cadastro.</h2>
           <p style="color: #666; font-size: 16px;">
@@ -47,12 +47,12 @@ export class EmailService {
           </p>
         </div>
       `,
-		};
+    };
 
-		try {
-			const info = await this.transporter.sendMail(mailOptions);
-		} catch (error) {
-			this.logger.error(`Erro ao enviar e-mail para ${to}:`, error);
-		}
-	}
+    try {
+      const info = await this.transporter.sendMail(mailOptions);
+    } catch (error) {
+      this.logger.error(`Erro ao enviar e-mail para ${to}:`, error);
+    }
+  }
 }

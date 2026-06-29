@@ -53,7 +53,7 @@ describe("ManagerService - validateProduct", () => {
 				{
 					provide: SearchIndexService,
 					useValue: {
-						updateSearchIndex: jest.fn(),
+						updateSearchIndexBulk: jest.fn(),
 					},
 				},
 				{
@@ -124,9 +124,8 @@ describe("ManagerService - validateProduct", () => {
 		expect(productColorRepo.addNewProductColor).toHaveBeenCalled();
 
 		// Verificação da Indexação (deve rodar para cada variantId retornado)
-		expect(searchService.updateSearchIndex).toHaveBeenCalledTimes(2);
-		expect(searchService.updateSearchIndex).toHaveBeenNthCalledWith(1, 500);
-		expect(searchService.updateSearchIndex).toHaveBeenNthCalledWith(2, 501);
+		expect(searchService.updateSearchIndexBulk).toHaveBeenCalledTimes(1);
+		expect(searchService.updateSearchIndexBulk).toHaveBeenCalledWith([500, 501]);
 
 		expect(result).toContain("Produto Cadastrado");
 	});
@@ -166,7 +165,8 @@ describe("ManagerService - validateProduct", () => {
 		const result = await service.validateProduct(mockDto, mockFiles);
 
 		expect(result).toContain("Houve alguns erros no cadastro");
-		expect(searchService.updateSearchIndex).toHaveBeenCalledTimes(1);
+		expect(searchService.updateSearchIndexBulk).toHaveBeenCalledTimes(1);
+		expect(searchService.updateSearchIndexBulk).toHaveBeenCalledWith([500]);
 	});
 
 	it("deve lançar erro e interromper o processo se a indexação de busca falhar", async () => {
@@ -185,7 +185,7 @@ describe("ManagerService - validateProduct", () => {
 		});
 
 		// Simula uma falha crítica no serviço de busca
-		searchService.updateSearchIndex.mockRejectedValue(
+		searchService.updateSearchIndexBulk.mockRejectedValue(
 			new Error("Falha no banco de dados FTS5"),
 		);
 
@@ -196,10 +196,10 @@ describe("ManagerService - validateProduct", () => {
 		await expect(service.validateProduct(mockDto, mockFiles)).rejects.toThrow(
 			/Falha no banco de dados FTS5/,
 		);
-		expect(searchService.updateSearchIndex).toHaveBeenCalledWith(999);
+		expect(searchService.updateSearchIndexBulk).toHaveBeenCalledWith([999]);
 	});
 
-	it("deve chamar updateSearchIndex com sucesso para múltiplos IDs de variantes", async () => {
+	it("deve chamar updateSearchIndexBulk com sucesso para múltiplos IDs de variantes", async () => {
 		// Arrange: Simula 3 variantes sendo inseridas com sucesso
 		const idsInseridos = [700, 701, 702];
 		catalogRepo.getCategories.mockResolvedValue([
@@ -219,18 +219,8 @@ describe("ManagerService - validateProduct", () => {
 		// Act
 		await service.validateProduct(mockDto, mockFiles);
 
-		// Assert: Verifica se o serviço de busca foi chamado para cada ID na ordem correta
-		expect(searchService.updateSearchIndex).toHaveBeenCalledTimes(
-			idsInseridos.length,
-		);
-
-		idsInseridos.forEach((id, index) => {
-			expect(searchService.updateSearchIndex).toHaveBeenNthCalledWith(
-				index + 1,
-				id,
-			);
-		});
-
-		expect(searchService.updateSearchIndex).toHaveBeenCalledWith(702);
+		// Assert: Verifica se o serviço de busca foi chamado com a array correta
+		expect(searchService.updateSearchIndexBulk).toHaveBeenCalledTimes(1);
+		expect(searchService.updateSearchIndexBulk).toHaveBeenCalledWith(idsInseridos);
 	});
 });

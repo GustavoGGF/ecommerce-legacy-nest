@@ -1,9 +1,4 @@
-import {
-	ExecutionContext,
-	Injectable,
-	Logger,
-	UnauthorizedException,
-} from "@nestjs/common";
+import { ExecutionContext, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { UserService } from "../services/UserService";
 
@@ -21,70 +16,69 @@ import { UserService } from "../services/UserService";
  */
 @Injectable()
 export class JwtManagerGuard extends AuthGuard("jwt") {
-	private readonly logger = new Logger("JwtAuthGuard");
-	constructor(private readonly userService: UserService) {
-		super();
-	}
+  private readonly logger = new Logger("JwtAuthGuard");
+  constructor(private readonly userService: UserService) {
+    super();
+  }
 
-	/**
-	 * Orquestra o fluxo de autorização da requisição.
-	 *
-	 * @param {ExecutionContext} context - Contexto da execução do NestJS.
-	 * @returns {Promise<boolean>} Retorna true se o acesso for permitido.
-	 *
-	 * @throws {UnauthorizedException} Se o usuário for inválido ou não possuir perfil administrativo.
-	 * @description
-	 * Realiza o tratamento de erros do Passport para permitir o redirecionamento manual
-	 * em caso de falha de autenticação em requisições de página.
-	 */
-	async canActivate(context: ExecutionContext): Promise<boolean> {
-		const request = context.switchToHttp().getRequest();
-		const url = request.url;
+  /**
+   * Orquestra o fluxo de autorização da requisição.
+   *
+   * @param {ExecutionContext} context - Contexto da execução do NestJS.
+   * @returns {Promise<boolean>} Retorna true se o acesso for permitido.
+   *
+   * @throws {UnauthorizedException} Se o usuário for inválido ou não possuir perfil administrativo.
+   * @description
+   * Realiza o tratamento de erros do Passport para permitir o redirecionamento manual
+   * em caso de falha de autenticação em requisições de página.
+   */
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+    const url = request.url;
 
-		const isStaticFile =
-			/\.(js|css|jpg|jpeg|png|gif|svg|ico|webp|ttf|woff|woff2|map|json)$/i.test(
-				url,
-			);
+    const isStaticFile = /\.(js|css|jpg|jpeg|png|gif|svg|ico|webp|ttf|woff|woff2|map|json)$/i.test(
+      url,
+    );
 
-		if (isStaticFile) return true;
+    if (isStaticFile) return true;
 
-		try {
-			await super.canActivate(context);
-		} catch (err) {
-			const response = context.switchToHttp().getResponse();
-			// Se for uma requisição de navegador (que aceita HTML), redireciona
-			if (request.headers.accept?.includes("text/html")) {
-				response.redirect("/login");
-				return false;
-			}
-			// Se for uma chamada de API (JSON), lança o erro original (401)
-			throw err;
-		}
+    try {
+      await super.canActivate(context);
+    } catch (err) {
+      const response = context.switchToHttp().getResponse();
+      // Se for uma requisição de navegador (que aceita HTML), redireciona
+      if (request.headers.accept?.includes("text/html")) {
+        response.redirect("/login");
+        return false;
+      }
+      // Se for uma chamada de API (JSON), lança o erro original (401)
+      throw err;
+    }
 
-		const user = request.user;
+    const user = request.user;
 
-		const isValid = await this.userService.getSpecificUser(user.id, user.mail);
+    const isValid = await this.userService.getSpecificUser(user.id, user.mail);
 
-		if (!isValid) {
-			const response = context.switchToHttp().getResponse();
-			if (request.headers.accept?.includes("text/html")) {
-				response.redirect("/login");
-				return false;
-			}
-			throw new UnauthorizedException("Usuário inválido");
-		}
+    if (!isValid) {
+      const response = context.switchToHttp().getResponse();
+      if (request.headers.accept?.includes("text/html")) {
+        response.redirect("/login");
+        return false;
+      }
+      throw new UnauthorizedException("Usuário inválido");
+    }
 
-		const isManager = await this.userService.checkIsManager(user.id);
+    const isManager = await this.userService.checkIsManager(user.id);
 
-		if (!isManager) {
-			const response = context.switchToHttp().getResponse();
-			if (request.headers.accept?.includes("text/html")) {
-				response.redirect("/login");
-				return false;
-			}
-			throw new UnauthorizedException("Perfil inválido");
-		}
+    if (!isManager) {
+      const response = context.switchToHttp().getResponse();
+      if (request.headers.accept?.includes("text/html")) {
+        response.redirect("/login");
+        return false;
+      }
+      throw new UnauthorizedException("Perfil inválido");
+    }
 
-		return true;
-	}
+    return true;
+  }
 }
