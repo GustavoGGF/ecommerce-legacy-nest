@@ -675,7 +675,7 @@ export class ManagerService {
         ({ invalidImages, urlImages } = await this.validateImages(files));
       }
 
-      let genID = await this.productRepository.addNewProduct(productData);
+      const genID = await this.productRepository.addNewProduct(productData);
 
       // Faz o Post do produto
       if (urlImages && urlImages.length > 0) {
@@ -691,7 +691,7 @@ export class ManagerService {
       }
 
       // Valida Cor, Quantidade e Tamanho
-      let { successResultValidation, failResultValidation } =
+      const { successResultValidation, failResultValidation } =
         await this.validateColorsForProduct(dictColors);
 
       let failResultPost: any[] = [];
@@ -788,7 +788,7 @@ export class ManagerService {
   }
 
   public async postCategory(category: string): Promise<any> {
-    let valid = await this.validateCategoryForPost(category);
+    const valid = await this.validateCategoryForPost(category);
     if (!valid) {
       throw new BadRequestException(
         "Categoria inválida, deve ser uma string com pelo menos 2 caracteres",
@@ -845,7 +845,7 @@ export class ManagerService {
    * @returns Promessa contendo o resultado da operação de cadastro.
    */
   public async postColor(body: any): Promise<any> {
-    let valid = await this.validateColorForPost(body.name, body.color);
+    const valid = await this.validateColorForPost(body.name, body.color);
     if (!valid) {
       throw new BadRequestException("A cor deve ser um texto com pelo menos 2 caracteres.");
     }
@@ -944,26 +944,86 @@ export class ManagerService {
    * @param files Arquivos de imagem enviados para atualização das mídias do produto.
    * @returns Mensagem indicando o resultado da operação e possíveis avisos de processamento.
    */
+  private async resolveCategoryId(categoria: string | number): Promise<number> {
+    const categories = await this.catalogRepository.getCategories();
+    const foundCategory = categories.find(
+      (cat) =>
+        cat.id === Number(categoria) || cat.item.toLowerCase() === String(categoria).toLowerCase(),
+    );
+
+    if (!foundCategory) {
+      this.logger.error(`Categoria não encontrada: ${categoria}`);
+      throw new BadRequestException("Categoria inválida");
+    }
+
+    return foundCategory.id;
+  }
+
+  private async updateProductImages(
+    productId: number,
+    existingImages: string | undefined,
+    files: Express.Multer.File[],
+  ): Promise<string[]> {
+    let invalidImages: string[] = [],
+      urlImages: string[] = [];
+    if (files && files.length > 0) {
+      ({ invalidImages, urlImages } = await this.validateImages(files));
+    }
+
+    await this.productRepository.deleteProductUrls(productId);
+
+    const existingUrls: string[] = existingImages
+      ? existingImages.split(",").filter((url: string) => url.trim().length > 0)
+      : [];
+
+    const finalUrls = [...existingUrls, ...urlImages];
+    if (finalUrls.length > 0) {
+      await this.productRepository.postURL(finalUrls, productId);
+    }
+
+    return invalidImages;
+  }
+
+  private async updateProductColors(
+    productId: number,
+    cores: any,
+  ): Promise<{ failResultValidation: string[]; failResultPost: any[] }> {
+    await this.productRepository.deleteProductColors(productId);
+
+    let dictColors: any[] = [];
+    if (cores) {
+      dictColors = await this.processProdutos(cores);
+    }
+
+    const { successResultValidation, failResultValidation } =
+      await this.validateColorsForProduct(dictColors);
+
+    let failResultPost: any[] = [];
+    let insertedIds: number[] = [];
+
+    if (successResultValidation.length !== 0) {
+      const result = await this.productColorRepo.addNewProductColor(
+        productId,
+        successResultValidation,
+      );
+      failResultPost = result.failResultPost;
+      insertedIds = result.insertedIds;
+    }
+
+    if (insertedIds.length > 0) {
+      await this.search.updateSearchIndexBulk(insertedIds);
+    }
+
+    return { failResultValidation, failResultPost };
+  }
+
   public async updateProduct(
     productId: number,
     productData: any,
     files: Express.Multer.File[],
   ): Promise<string> {
     try {
-      // Tenta encontrar a categoria pelo ID ou nome
-      const categories = await this.catalogRepository.getCategories();
-      const foundCategory = categories.find(
-        (cat) =>
-          cat.id === Number(productData.categoria) ||
-          cat.item.toLowerCase() === String(productData.categoria).toLowerCase(),
-      );
-
-      if (!foundCategory) {
-        this.logger.error(`Categoria não encontrada: ${productData.categoria}`);
-        throw new BadRequestException("Categoria inválida");
-      }
-
-      const categoryId = foundCategory.id;
+      const categoryId = await this.resolveCategoryId(productData.categoria);
       const parsedPrice = parseFloat(String(productData.preco));
 
       // Gerencia transação através do repositório
@@ -978,60 +1038,27 @@ export class ManagerService {
         productData.descricao || "",
       );
 
-      // 2. Processamento das novas imagens
-      let invalidImages: string[] = [],
-        urlImages: string[] = [];
-      if (files && files.length > 0) {
-        ({ invalidImages, urlImages } = await this.validateImages(files));
-      }
+      // 2. Processamento das novas imagens e atualização das URLs
+      const invalidImages = await this.updateProductImages(
+        productId,
+        productData.existingImages,
+        files,
+      );
 
-      // 3. Atualizar imagens do produto (product_urls) usando o repositório
-      await this.productRepository.deleteProductUrls(productId);
-
-      const existingUrls: string[] = productData.existingImages
-        ? productData.existingImages.split(",").filter((url: string) => url.trim().length > 0)
-        : [];
-
-      const finalUrls = [...existingUrls, ...urlImages];
-      if (finalUrls.length > 0) {
-        await this.productRepository.postURL(finalUrls, productId);
-      }
-
-      // 4. Atualizar cores/tamanhos (product_colors) usando o repositório
-      await this.productRepository.deleteProductColors(productId);
-
-      let dictColors: any[] = [];
-      if (productData.cores) {
-        dictColors = await this.processProdutos(productData.cores);
-      }
-
-      const { successResultValidation, failResultValidation } =
-        await this.validateColorsForProduct(dictColors);
-
-      let failResultPost: any[] = [];
-      let insertedIds: number[] = [];
-
-      if (successResultValidation.length !== 0) {
-        const result = await this.productColorRepo.addNewProductColor(
-          productId,
-          successResultValidation,
-        );
-        failResultPost = result.failResultPost;
-        insertedIds = result.insertedIds;
-      }
-
-      if (insertedIds.length > 0) {
-        await this.search.updateSearchIndexBulk(insertedIds);
-      }
+      // 3. Atualizar cores/tamanhos (product_colors) usando o repositório
+      const { failResultValidation, failResultPost } = await this.updateProductColors(
+        productId,
+        productData.cores,
+      );
 
       await this.productRepository.commit();
 
       let message: string = "";
       if (invalidImages.length !== 0) {
-        message += `Houve algumas imagens inválidas: ${invalidImages}`;
+        message += `Houve algumas imagens inválidas: ${invalidImages.join(", ")}`;
       }
       if (failResultValidation.length !== 0) {
-        message += ` Alguns parâmetros estavam incorretos: ${failResultValidation}`;
+        message += ` Alguns parâmetros estavam incorretos: ${failResultValidation.join(", ")}`;
       }
       if (failResultPost && failResultPost.length !== 0) {
         message += ` Houve alguns erros no cadastro: ${JSON.stringify(failResultPost)}`;
@@ -1041,7 +1068,9 @@ export class ManagerService {
     } catch (error) {
       try {
         await this.productRepository.rollback();
-      } catch (e) {}
+      } catch (e) {
+        // Rollback silencioso
+      }
       this.logger.error(`Erro ao atualizar produto: ${error}`);
       throw new BadRequestException(`Erro ao atualizar produto: ${error}`);
     }
