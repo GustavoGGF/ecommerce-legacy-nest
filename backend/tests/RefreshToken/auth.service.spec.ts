@@ -1,3 +1,4 @@
+import { faker } from "@faker-js/faker";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { ConflictException, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -58,14 +59,15 @@ describe("AuthService", () => {
 
 	describe("generateTokenPair", () => {
 		it("deve gerar um access token JWT e persistir o refresh token no banco", async () => {
-			const fakeUser = { id: 1, mail: "usuario@test.com" };
-			jwtService.sign.mockReturnValue("jwt.access.token");
+			const fakeUser = { id: 1, mail: faker.internet.email() };
+			const fakeAccessToken = faker.string.alphanumeric(32);
+			jwtService.sign.mockReturnValue(fakeAccessToken);
 			refreshTokenRepo.create.mockResolvedValue(undefined);
 
 			const result = await service.generateTokenPair(fakeUser, false);
 
 			// Access token deve ser o JWT retornado pelo JwtService
-			expect(result.accessToken).toBe("jwt.access.token");
+			expect(result.accessToken).toBe(fakeAccessToken);
 
 			// Refresh token deve ser uma string UUID não-vazia
 			expect(typeof result.rawRefreshToken).toBe("string");
@@ -90,13 +92,15 @@ describe("AuthService", () => {
 		});
 
 		it("deve propagar o erro quando a persistência do refresh token falhar", async () => {
-			jwtService.sign.mockReturnValue("jwt.token");
+			const fakeAccessToken = faker.string.alphanumeric(32);
+			jwtService.sign.mockReturnValue(fakeAccessToken);
 			refreshTokenRepo.create.mockRejectedValue(
 				new Error("UNIQUE constraint failed") as never,
 			);
 
+			const fakeEmail = faker.internet.email();
 			await expect(
-				service.generateTokenPair({ id: 1, mail: "a@b.com" }, false),
+				service.generateTokenPair({ id: 1, mail: fakeEmail }, false),
 			).rejects.toThrow("UNIQUE constraint failed");
 		});
 	});
@@ -107,7 +111,7 @@ describe("AuthService", () => {
 
 	describe("refreshAccessToken", () => {
 		it("deve rodar a rotação: invalidar o token antigo e emitir um novo par", async () => {
-			const rawToken = "old-refresh-token";
+			const rawToken = faker.string.uuid();
 			const futureDate = new Date(Date.now() + 86400000).toISOString(); // +1 dia
 
 			refreshTokenRepo.findByRawToken.mockResolvedValue({
@@ -117,9 +121,11 @@ describe("AuthService", () => {
 				expires_at: futureDate,
 			});
 
-			userRepo.getInfo.mockResolvedValue({ mail: "usuario@test.com" });
+			const fakeEmail = faker.internet.email();
+			userRepo.getInfo.mockResolvedValue({ mail: fakeEmail });
 			refreshTokenRepo.deleteByRawToken.mockResolvedValue(undefined);
-			jwtService.sign.mockReturnValue("new.jwt.token");
+			const newAccessToken = faker.string.alphanumeric(32);
+			jwtService.sign.mockReturnValue(newAccessToken);
 			refreshTokenRepo.create.mockResolvedValue(undefined);
 
 			const result = await service.refreshAccessToken(rawToken);
@@ -128,7 +134,7 @@ describe("AuthService", () => {
 			expect(refreshTokenRepo.deleteByRawToken).toHaveBeenCalledWith(rawToken);
 
 			// Um novo access token deve ser emitido
-			expect(result.accessToken).toBe("new.jwt.token");
+			expect(result.accessToken).toBe(newAccessToken);
 
 			// Um novo refresh token deve ser persistido (rotação)
 			expect(refreshTokenRepo.create).toHaveBeenCalledTimes(1);
@@ -137,8 +143,9 @@ describe("AuthService", () => {
 		it("deve lançar UnauthorizedException quando o refresh token não existir no banco", async () => {
 			refreshTokenRepo.findByRawToken.mockResolvedValue(undefined);
 
+			const invalidToken = faker.string.uuid();
 			await expect(
-				service.refreshAccessToken("token-invalido"),
+				service.refreshAccessToken(invalidToken),
 			).rejects.toThrow(UnauthorizedException);
 
 			// Nenhuma deleção ou criação deve ocorrer com token inválido
@@ -159,12 +166,13 @@ describe("AuthService", () => {
 			// O token expirado deve ser removido do banco como limpeza preventiva
 			refreshTokenRepo.deleteByRawToken.mockResolvedValue(undefined);
 
+			const expiredToken = faker.string.uuid();
 			await expect(
-				service.refreshAccessToken("token-expirado"),
+				service.refreshAccessToken(expiredToken),
 			).rejects.toThrow(UnauthorizedException);
 
 			expect(refreshTokenRepo.deleteByRawToken).toHaveBeenCalledWith(
-				"token-expirado",
+				expiredToken,
 			);
 			// Nenhum novo par deve ser gerado
 			expect(refreshTokenRepo.create).not.toHaveBeenCalled();
@@ -177,7 +185,7 @@ describe("AuthService", () => {
 
 	describe("revokeRefreshToken", () => {
 		it("deve chamar deleteByRawToken com o token recebido (logout)", async () => {
-			const rawToken = "token-a-revogar";
+			const rawToken = faker.string.uuid();
 			refreshTokenRepo.deleteByRawToken.mockResolvedValue(undefined);
 
 			await service.revokeRefreshToken(rawToken);
@@ -191,8 +199,9 @@ describe("AuthService", () => {
 				new Error("database error") as never,
 			);
 
+			const anyToken = faker.string.uuid();
 			await expect(
-				service.revokeRefreshToken("qualquer-token"),
+				service.revokeRefreshToken(anyToken),
 			).rejects.toThrow("database error");
 		});
 	});
@@ -206,9 +215,11 @@ describe("AuthService", () => {
 			userRepo.findByEmail.mockResolvedValue(null);
 			userRepo.create.mockResolvedValue(undefined);
 
+			const newEmail = faker.internet.email();
+			const password = faker.internet.password();
 			const result = await service.registerUser({
-				mail: "novo@test.com",
-				pass: "senha123",
+				mail: newEmail,
+				pass: password,
 				username: "Novo Usuário",
 				rememberMe: false,
 			});
@@ -218,15 +229,17 @@ describe("AuthService", () => {
 		});
 
 		it("deve lançar ConflictException quando o e-mail já estiver em uso", async () => {
+			const existingEmail = faker.internet.email();
 			userRepo.findByEmail.mockResolvedValue({
 				id: 1,
-				mail: "existente@test.com",
+				mail: existingEmail,
 			});
 
+			const password = faker.internet.password();
 			await expect(
 				service.registerUser({
-					mail: "existente@test.com",
-					pass: "senha123",
+					mail: existingEmail,
+					pass: password,
 					username: "Usuário",
 					rememberMe: false,
 				}),

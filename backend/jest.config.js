@@ -11,6 +11,6 @@ module.exports = {
   testEnvironment: "node",
   // Esta regra permite que o Jest processe pacotes ESM que normalmente causariam erro de "import"
   transformIgnorePatterns: [
-    "/node_modules/(?!(file-type|token-types|strtok3|peek-readable|@borewit|@tokenizer|uint8array-extras)/)",
+    "/node_modules/(?!(file-type|token-types|strtok3|peek-readable|@borewit|@tokenizer|uint8array-extras|@faker-js)/)",
   ],
 };

@@ -1,3 +1,4 @@
+import { faker } from "@faker-js/faker";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -29,7 +30,7 @@ function makeRequest(
 	overrides: Partial<MockRequest> = {},
 ): Request & MockRequest {
 	return {
-		user: { id: 1, mail: "usuario@test.com" },
+		user: { id: 1, mail: faker.internet.email() },
 		body: {},
 		cookies: {},
 		...overrides,
@@ -90,14 +91,17 @@ describe("AuthController", () => {
 
 	describe("login", () => {
 		it("deve retornar access_token no corpo e definir o cookie refresh_token na resposta", async () => {
-			const fakeExpiresAt = new Date("2030-01-01T00:00:00Z");
+			const fakeExpiresAt = faker.date.future();
+			const fakeAccessToken = faker.string.alphanumeric(32);
+			const fakeRefreshToken = faker.string.uuid();
 			authService.generateTokenPair.mockResolvedValue({
-				accessToken: "jwt.access.token",
-				rawRefreshToken: "raw-refresh-uuid",
+				accessToken: fakeAccessToken,
+				rawRefreshToken: fakeRefreshToken,
 				refreshExpiresAt: fakeExpiresAt,
 			});
 
-			const req = makeRequest({ body: { rememberMe: false } });
+			const fakeEmail = faker.internet.email();
+			const req = makeRequest({ body: { rememberMe: false }, user: { id: 1, mail: fakeEmail } });
 			const res = makeResponse();
 
 			const result = await controller.login(req, res);
@@ -105,13 +109,13 @@ describe("AuthController", () => {
 			// O access_token deve estar no corpo da resposta
 			expect(result).toMatchObject({
 				message: "Login bem-sucedido",
-				access_token: "jwt.access.token",
+				access_token: fakeAccessToken,
 			});
 
 			// O cookie HttpOnly deve ter sido setado com o refresh token opaco
 			expect(res.cookie).toHaveBeenCalledWith(
 				"refresh_token",
-				"raw-refresh-uuid",
+				fakeRefreshToken,
 				expect.objectContaining({
 					httpOnly: true,
 					sameSite: "strict",
@@ -121,25 +125,26 @@ describe("AuthController", () => {
 
 			// O serviço deve ter sido chamado com rememberMe=false
 			expect(authService.generateTokenPair).toHaveBeenCalledWith(
-				{ id: 1, mail: "usuario@test.com" },
+				{ id: 1, mail: fakeEmail },
 				false,
 			);
 		});
 
 		it("deve chamar generateTokenPair com rememberMe=true quando enviado pelo cliente", async () => {
 			authService.generateTokenPair.mockResolvedValue({
-				accessToken: "jwt.longo",
-				rawRefreshToken: "raw-uuid-longo",
-				refreshExpiresAt: new Date("2056-01-01"),
+				accessToken: faker.string.alphanumeric(32),
+				rawRefreshToken: faker.string.uuid(),
+				refreshExpiresAt: faker.date.future(),
 			});
 
-			const req = makeRequest({ body: { rememberMe: true } });
+			const fakeEmail = faker.internet.email();
+			const req = makeRequest({ body: { rememberMe: true }, user: { id: 1, mail: fakeEmail } });
 			const res = makeResponse();
 
 			await controller.login(req, res);
 
 			expect(authService.generateTokenPair).toHaveBeenCalledWith(
-				{ id: 1, mail: "usuario@test.com" },
+				{ id: 1, mail: fakeEmail },
 				true,
 			);
 		});
@@ -151,15 +156,18 @@ describe("AuthController", () => {
 
 	describe("refresh", () => {
 		it("deve retornar novo access_token e rotacionar o cookie quando o refresh token for válido", async () => {
-			const newExpiresAt = new Date("2030-06-01T00:00:00Z");
+			const newExpiresAt = faker.date.future();
+			const newAccessToken = faker.string.alphanumeric(32);
+			const newRefreshToken = faker.string.uuid();
 			authService.refreshAccessToken.mockResolvedValue({
-				accessToken: "novo.jwt.token",
-				rawRefreshToken: "novo-refresh-uuid",
+				accessToken: newAccessToken,
+				rawRefreshToken: newRefreshToken,
 				refreshExpiresAt: newExpiresAt,
 			});
 
+			const oldRefreshToken = faker.string.uuid();
 			const req = makeRequest({
-				cookies: { refresh_token: "old-refresh-uuid" },
+				cookies: { refresh_token: oldRefreshToken },
 			});
 			const res = makeResponse();
 
@@ -167,18 +175,18 @@ describe("AuthController", () => {
 
 			expect(result).toMatchObject({
 				message: "Tokens renovados com sucesso.",
-				access_token: "novo.jwt.token",
+				access_token: newAccessToken,
 			});
 
 			// O serviço deve ter sido chamado com o token lido do cookie
 			expect(authService.refreshAccessToken).toHaveBeenCalledWith(
-				"old-refresh-uuid",
+				oldRefreshToken,
 			);
 
 			// O novo cookie deve ter sido setado com o token rotacionado
 			expect(res.cookie).toHaveBeenCalledWith(
 				"refresh_token",
-				"novo-refresh-uuid",
+				newRefreshToken,
 				expect.objectContaining({ httpOnly: true }),
 			);
 		});
@@ -204,8 +212,9 @@ describe("AuthController", () => {
 		it("deve revogar o token no banco e apagar o cookie ao fazer logout", async () => {
 			authService.revokeRefreshToken.mockResolvedValue(undefined);
 
+			const sessionToken = faker.string.uuid();
 			const req = makeRequest({
-				cookies: { refresh_token: "token-da-sessao" },
+				cookies: { refresh_token: sessionToken },
 			});
 			const res = makeResponse();
 
@@ -215,7 +224,7 @@ describe("AuthController", () => {
 
 			// O serviço deve ter revogado o token correto
 			expect(authService.revokeRefreshToken).toHaveBeenCalledWith(
-				"token-da-sessao",
+				sessionToken,
 			);
 
 			// O cookie deve ter sido removido da resposta
