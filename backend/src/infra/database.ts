@@ -15,45 +15,45 @@ import { open, Database } from "sqlite";
  * @category Infrastructure
  */
 export class DatabaseConnection {
-	private static instance: Database;
+  private static instance: Database;
 
-	private constructor() {}
+  private constructor() {}
 
-	/**
-	 * Recupera a instância ativa do banco de dados ou cria uma nova se inexistente.
-	 *
-	 * @returns {Promise<Database>} A instância da conexão pronta para uso.
-	 * @example
-	 * const db = await DatabaseConnection.getInstance();
-	 */
-	public static async getInstance(): Promise<Database> {
-		if (!DatabaseConnection.instance) {
-			// Abre a conexão com o arquivo
-			DatabaseConnection.instance = await open({
-				filename: "./database.sqlite",
-				driver: sqlite3.Database,
-			});
+  /**
+   * Recupera a instância ativa do banco de dados ou cria uma nova se inexistente.
+   *
+   * @returns {Promise<Database>} A instância da conexão pronta para uso.
+   * @example
+   * const db = await DatabaseConnection.getInstance();
+   */
+  public static async getInstance(): Promise<Database> {
+    if (!DatabaseConnection.instance) {
+      // Abre a conexão com o arquivo
+      DatabaseConnection.instance = await open({
+        filename: "./database.sqlite",
+        driver: sqlite3.Database,
+      });
 
-			await DatabaseConnection.instance.exec("PRAGMA foreign_keys = ON");
+      await DatabaseConnection.instance.exec("PRAGMA foreign_keys = ON");
 
-			await DatabaseConnection.initializeSchema();
-		}
-		return DatabaseConnection.instance;
-	}
+      await DatabaseConnection.initializeSchema();
+    }
+    return DatabaseConnection.instance;
+  }
 
-	/**
-	 * Define e inicializa a estrutura de tabelas do sistema (Auto-Migration).
-	 *
-	 * @description
-	 * Executa comandos `CREATE TABLE IF NOT EXISTS` para as entidades:
-	 * - `users` & `addresses`: Gestão de clientes e logística.
-	 * - `catalog` & `products`: Núcleo do e-commerce.
-	 * - `colors`, `product_colors` & `product_urls`: Atributos e mídia dos produtos.
-	 *
-	 * @private
-	 */
-	private static async initializeSchema() {
-		const schema = `
+  /**
+   * Define e inicializa a estrutura de tabelas do sistema (Auto-Migration).
+   *
+   * @description
+   * Executa comandos `CREATE TABLE IF NOT EXISTS` para as entidades:
+   * - `users` & `addresses`: Gestão de clientes e logística.
+   * - `catalog` & `products`: Núcleo do e-commerce.
+   * - `colors`, `product_colors` & `product_urls`: Atributos e mídia dos produtos.
+   *
+   * @private
+   */
+  private static async initializeSchema() {
+    const schema = `
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         mail TEXT UNIQUE NOT NULL,
@@ -193,20 +193,20 @@ export class DatabaseConnection {
       CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens (user_id);
       `;
 
-		await DatabaseConnection.instance.exec(schema);
+    await DatabaseConnection.instance.exec(schema);
 
-		// Migração manual: Adiciona a coluna created_at caso a tabela products já existisse sem ela
-		try {
-			await DatabaseConnection.instance.exec(
-				"ALTER TABLE products ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP",
-			);
-		} catch (e) {
-			// Se a coluna já existir, o SQLite lançará um erro que podemos ignorar
-		}
+    // Migração manual: Adiciona a coluna created_at caso a tabela products já existisse sem ela
+    try {
+      await DatabaseConnection.instance.exec(
+        "ALTER TABLE products ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP",
+      );
+    } catch (e) {
+      // Se a coluna já existir, o SQLite lançará um erro que podemos ignorar
+    }
 
-		// Migração manual: cria tabela refresh_tokens caso a aplicação já existisse sem ela
-		try {
-			await DatabaseConnection.instance.exec(`
+    // Migração manual: cria tabela refresh_tokens caso a aplicação já existisse sem ela
+    try {
+      await DatabaseConnection.instance.exec(`
         CREATE TABLE IF NOT EXISTS refresh_tokens (
           id         INTEGER PRIMARY KEY AUTOINCREMENT,
           user_id    INTEGER  NOT NULL,
@@ -217,8 +217,8 @@ export class DatabaseConnection {
         );
         CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens (user_id);
       `);
-		} catch (e) {
-			// Tabela ou índice já existem — ignorar
-		}
-	}
+    } catch (e) {
+      // Tabela ou índice já existem — ignorar
+    }
+  }
 }
