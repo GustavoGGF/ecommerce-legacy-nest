@@ -1,7 +1,7 @@
 import { Controller, Get, Res, Req, Next } from "@nestjs/common";
 import { join } from "path";
 import { Response, Request, NextFunction } from "express";
-import { ApiConsumes, ApiOperation, ApiResponse } from "@nestjs/swagger";
+import { ApiOperation, ApiResponse } from "@nestjs/swagger";
 import rateLimit from "express-rate-limit";
 
 const serveFrontendLimiter = rateLimit({
