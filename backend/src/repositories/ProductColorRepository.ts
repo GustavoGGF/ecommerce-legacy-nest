@@ -84,7 +84,7 @@ export class ProductColorRepository {
 
       return { failResultPost, insertedIds };
     } catch (error) {
-      let { failResultCallBack } = await this.dbService.callFallBackOperation(
+      const { failResultCallBack } = await this.dbService.callFallBackOperation(
         id,
         "INSERT INTO",
         "product_colors",
